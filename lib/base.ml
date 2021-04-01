@@ -12,33 +12,32 @@ module IdSet = Set.Make (String)
 module IdMap = Map.Make (String)
 module RegSet = Set.Make (Register)
 
-type instr =
-  | Const of Register.t * Int64.t  (** Const d, c : loads c into d *)
-  | Add of Register.t * Register.t * Register.t
-      (** Add d, r1, r2 : addition of integers : d = r1 + r2 *)
-  | Sub of Register.t * Register.t * Register.t
-      (** Sub d, r1, r2 : subtraction of integers : d = r1 - r2 *)
-  | Mul of Register.t * Register.t * Register.t
+type bin_op =
+  | Add  (** Add d, r1, r2 : addition of integers : d = r1 + r2 *)
+  | Sub  (** Sub d, r1, r2 : subtraction of integers : d = r1 - r2 *)
+  | Mul
       (** Mul d, r1, r2 : multiplication of integers : d = (r1 * r2) & 0b111...111
         The bits that do not fit in the memory cell are ignored *)
-  | Div of Register.t * Register.t * Register.t
+  | Div
       (** Div d, r1, r2 : signed division of integers : d = r1 // r2.
         If r2 = 0, the program halts and reports an error *)
-  | Rem of Register.t * Register.t * Register.t
+  | Rem
       (** Rem d, r1, r2 : signed integer remainder : d = r1 mod r2.
         If r2 = 0, the program halts and reports an error *)
-  | Udiv of Register.t * Register.t * Register.t
+  | Udiv
       (** Div d, r1, r2 : unsigned division of integers : d = r1 // r2.
         If r2 = 0, the program halts and reports an error *)
-  | Urem of Register.t * Register.t * Register.t
+  | Urem
       (** Rem d, r1, r2 : unsigned integer remainder : d = r1 mod r2.
         If r2 = 0, the program halts and reports an error *)
+  | And  (** And d, r1, r2 : bitwise and *)
+  | Or  (** Or d, r1, r2 : bitwise or *)
+  | Xor  (** Xor d, r1, r2 : bitwise exclusive or *)
+
+type instr =
+  | Const of Register.t * Int64.t  (** Const d, c : loads c into d *)
+  | BinOp of bin_op * Register.t * Register.t * Register.t
   | Not of Register.t * Register.t  (** Not d, r : bitwise negation *)
-  | And of Register.t * Register.t * Register.t
-      (** And d, r1, r2 : bitwise and *)
-  | Or of Register.t * Register.t * Register.t  (** Or d, r1, r2 : bitwise or *)
-  | Xor of Register.t * Register.t * Register.t
-      (** Xor d, r1, r2 : bitwise exclusive or *)
   | Branch of BlockId.t
       (** Branch target : jumps to the block `target`. Puts the current block name as the previous block encountered *)
   | BranchIfZero of Register.t * BlockId.t

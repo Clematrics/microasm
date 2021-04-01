@@ -7,18 +7,9 @@ let check_instruction (reg_set, errors) scope_dictionary block_dictionary
   let instr_ref = (no, block_ref) in
   let new_reg, block_request, scope_request =
     match instruction with
-    | Const (d, _) -> (Some d, None, None)
-    | Add (d, _, _) -> (Some d, None, None)
-    | Sub (d, _, _) -> (Some d, None, None)
-    | Mul (d, _, _) -> (Some d, None, None)
-    | Div (d, _, _) -> (Some d, None, None)
-    | Rem (d, _, _) -> (Some d, None, None)
-    | Udiv (d, _, _) -> (Some d, None, None)
-    | Urem (d, _, _) -> (Some d, None, None)
+    | Const (d, _)
+    | BinOp (_, d, _, _)
     | Not (d, _) -> (Some d, None, None)
-    | And (d, _, _) -> (Some d, None, None)
-    | Or (d, _, _) -> (Some d, None, None)
-    | Xor (d, _, _) -> (Some d, None, None)
     | Branch name -> (None, Some name, None)
     | BranchIfZero (_, name) -> (None, Some name, None)
     | BranchIfLess (_, _, name) -> (None, Some name, None)

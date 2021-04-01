@@ -14,9 +14,9 @@ let recursive_factorial =
         ] );
       ( "main_case",
         [
-          Sub (3, 0, 2);
+          BinOp (Sub, 3, 0, 2);
           Call (4, "recursive_factorial", [ 3 ]);
-          Mul (5, 4, 0);
+          BinOp (Mul, 5, 4, 0);
           Branch "return";
         ] );
       ("return", [ Phi (6, "main_case", 5, 2); Return 6 ]);
@@ -30,8 +30,8 @@ let loop_factorial =
         [
           Phi (2, "init_loop", 1, 4);
           Phi (3, "init_loop", 0, 5);
-          Mul (4, 2, 3);
-          Sub (5, 3, 1);
+          BinOp (Mul, 4, 2, 3);
+          BinOp (Sub, 5, 3, 1);
           BranchIfLess (5, 1, "return");
           Branch "loop_body";
         ] );

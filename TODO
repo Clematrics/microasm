@@ -1,0 +1,8 @@
+- Trace linearization
+- Pretty-print instructions
+- Improve the pretty-printer of the interpreter state
+- Complete debugging commands
+- Add instruction annotations (breakpoints, checks, ...)
+- documentation
+- tests
+- clean memory from local registers on returns

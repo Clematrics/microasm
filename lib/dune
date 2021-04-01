@@ -1,6 +1,6 @@
 (library
  (name microasm)
- (modules base checker build interpreter))
+ (modules base checker build trace interpreter))
 
 
 ; (env
