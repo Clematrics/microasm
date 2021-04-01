@@ -63,7 +63,7 @@ class execution ?(enable_trace = false) program =
 
     val mutable trace = []
 
-    method trace () = List.rev trace
+    method trace () = linearize @@ List.rev trace
     (* Trace is stored in reverse order *)
 
     method private new_memory_cell () =

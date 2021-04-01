@@ -1,4 +1,3 @@
-- Trace linearization
 - Pretty-print instructions
 - Improve the pretty-printer of the interpreter state
 - Complete debugging commands
