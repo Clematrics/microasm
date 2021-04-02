@@ -218,44 +218,60 @@ class execution ?(enable_trace = false) program =
       if enable_trace then trace <- instr_trace :: trace
 
     method print fmt =
-      let int64 fmt value = Format.fprintf fmt "%Ld (%Lx)" value value in
-      Format.fprintf fmt "@[<h>Finished:@ %B;@ Return value:@ %a@]@," finished
-        int64 return_value;
+      Format.pp_open_vbox fmt 0;
+      Format.fprintf fmt "@[<h 0>Finished:@ %B;@ Return value:@ %a@]@ " finished
+        pp_int64 return_value;
       (* Finished + return value *)
-      let i, b, s = position in
-      Format.fprintf fmt "@[<h>Position:@ (%d@ : %s@ : %s)@]@," i b#name s#name;
-      (* Print pos *)
-      let reg fmt (reg, glob, value) =
-        Format.fprintf fmt "@[<h>@<8>%u@ @<8>%u@ @<30>%a@]" reg glob int64 value
-      in
-      let regs fmt =
-        RegisterFile.iter
-          (fun loc glob ->
-            let value, _ = self#get_value loc in
-            Format.fprintf fmt "%a@," reg (loc, glob, value))
-          local_reg_file
-      in
-      Format.fprintf fmt "@[Registers (local id, global id, value):@ %t@]@,"
-        regs;
       (* Print local_reg global_reg value *)
       let pp_option fmt = function
         | None -> Format.fprintf fmt "None"
         | Some b -> Format.fprintf fmt "%s" b#name
       in
-      let frame fmt (_, (i, (b, s)), ret, prev) =
+      let frame fmt (_, (i, (b, caller)), ret, prev) =
         Format.fprintf fmt
-          "@[<h>Next instruction:@ %u,@ %s,@ %s;@ Return register:@ %u;@ \
-           Previous block:@ %a@]"
-          i b s ret pp_option prev
+          "@[<h 0>%s@ at %s:%u@ into %u@ (previous block:@ %a)@]"
+          caller b (i - 1) ret pp_option prev
       in
       let rec pp_stack limit fmt = function
-        | [] -> Format.fprintf fmt "End of call stack"
-        | _ when limit = 0 -> Format.fprintf fmt "       ...       "
+        | [] -> Format.fprintf fmt ""
+        | _ when limit = 0 -> Format.fprintf fmt "..."
         | hd :: tl ->
-            Format.fprintf fmt "%a@,%a" frame hd (pp_stack (limit - 1)) tl
+            Format.fprintf fmt "@ %a%a" frame hd (pp_stack (limit - 1)) tl
       in
-      Format.fprintf fmt "@[<v>%a@]@\n" (pp_stack 4) call_stack
-    (* Print stack up to ... *)
+      Format.fprintf fmt "@[<v 4>Call stack:%a@]@ " (pp_stack 4)
+        call_stack;
+      (* Print stack up to ... *)
+      let reg fmt (reg, glob, value) =
+        Format.fprintf fmt "@[<h 0>%8u@ -> %8u@ -> %a@]" reg glob pp_wide_int64 value
+      in
+      let regs fmt =
+        RegisterFile.iter
+          (fun loc glob ->
+            let value, _ = self#get_value loc in
+            Format.fprintf fmt "@ %a" reg (loc, glob, value))
+          local_reg_file
+      in
+      Format.fprintf fmt
+        "@[<v 4>Registers (local id, global id, value):%t@]@ " regs;
+      let i, block, scope = position in
+      let pp_code fmt view_size =
+        let block_size = Array.length block#instructions in
+        let from = max (i - view_size) 0
+        and to_ = min (i + view_size) (block_size - 1) in
+        if from > 0 then
+          Format.fprintf fmt "     ...@ ";
+        for j = from to to_ do
+          if i = j then
+            Format.fprintf fmt "--> %a@ " pp_instr (block#instruction j)
+          else
+            Format.fprintf fmt "    %a@ " pp_instr (block#instruction j)
+        done;
+        if to_ < block_size - 1 then
+          Format.fprintf fmt "     ...@ ";
+      in
+      Format.fprintf fmt "@[<v 4>%s:@ %s:@ %a@]" scope#name block#name pp_code 4;
+      (* Print position and code *)
+      Format.pp_close_box fmt ()
 
     method printf () = self#print Format.std_formatter
 
@@ -269,8 +285,9 @@ class execution ?(enable_trace = false) program =
             done
         | Next n ->
             let rec loop i =
-              self#step_once ();
-              if i > 0 && not finished then loop (i - 1)
+              if i > 0 && not finished then (
+                self#step_once ();
+                loop (i - 1))
             in
             loop n
         | StepInto -> () (* TODO: *)
