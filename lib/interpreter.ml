@@ -206,6 +206,10 @@ class execution ?(enable_trace = false) program =
                 self#execute Stop;
                 TStop gr1
             | (old_reg_file, instr_ref, d, prev_block) :: tail ->
+                RegisterFile.iter
+                  (fun _ gr -> Memory.remove memory gr)
+                  local_reg_file;
+                (* Deleting global registers linked to this scope *)
                 call_stack <- tail;
                 local_reg_file <- old_reg_file;
                 let i, (block_name, scope_name) = instr_ref in
@@ -229,8 +233,8 @@ class execution ?(enable_trace = false) program =
       in
       let frame fmt (_, (i, (b, caller)), ret, prev) =
         Format.fprintf fmt
-          "@[<h 0>%s@ at %s:%u@ into %u@ (previous block:@ %a)@]"
-          caller b (i - 1) ret pp_option prev
+          "@[<h 0>%s@ at %s:%u@ into %u@ (previous block:@ %a)@]" caller b
+          (i - 1) ret pp_option prev
       in
       let rec pp_stack limit fmt = function
         | [] -> Format.fprintf fmt ""
@@ -238,11 +242,11 @@ class execution ?(enable_trace = false) program =
         | hd :: tl ->
             Format.fprintf fmt "@ %a%a" frame hd (pp_stack (limit - 1)) tl
       in
-      Format.fprintf fmt "@[<v 4>Call stack:%a@]@ " (pp_stack 4)
-        call_stack;
+      Format.fprintf fmt "@[<v 4>Call stack:%a@]@ " (pp_stack 4) call_stack;
       (* Print stack up to ... *)
       let reg fmt (reg, glob, value) =
-        Format.fprintf fmt "@[<h 0>%8u@ -> %8u@ -> %a@]" reg glob pp_wide_int64 value
+        Format.fprintf fmt "@[<h 0>%8u@ -> %8u@ -> %a@]" reg glob pp_wide_int64
+          value
       in
       let regs fmt =
         RegisterFile.iter
@@ -251,23 +255,20 @@ class execution ?(enable_trace = false) program =
             Format.fprintf fmt "@ %a" reg (loc, glob, value))
           local_reg_file
       in
-      Format.fprintf fmt
-        "@[<v 4>Registers (local id, global id, value):%t@]@ " regs;
+      Format.fprintf fmt "@[<v 4>Registers (local id, global id, value):%t@]@ "
+        regs;
       let i, block, scope = position in
       let pp_code fmt view_size =
         let block_size = Array.length block#instructions in
         let from = max (i - view_size) 0
         and to_ = min (i + view_size) (block_size - 1) in
-        if from > 0 then
-          Format.fprintf fmt "     ...@ ";
+        if from > 0 then Format.fprintf fmt "     ...@ ";
         for j = from to to_ do
           if i = j then
             Format.fprintf fmt "--> %a@ " pp_instr (block#instruction j)
-          else
-            Format.fprintf fmt "    %a@ " pp_instr (block#instruction j)
+          else Format.fprintf fmt "    %a@ " pp_instr (block#instruction j)
         done;
-        if to_ < block_size - 1 then
-          Format.fprintf fmt "     ...@ ";
+        if to_ < block_size - 1 then Format.fprintf fmt "     ...@ "
       in
       Format.fprintf fmt "@[<v 4>%s:@ %s:@ %a@]" scope#name block#name pp_code 4;
       (* Print position and code *)

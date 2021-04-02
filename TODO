@@ -2,7 +2,6 @@
 - Add instruction annotations (breakpoints, checks, ...)
 - Documentation
 - Tests
-- Clean memory from local registers on returns
 - Check correctness of constraints (with tests?)
 - More ergonomic solver:
 	- read model

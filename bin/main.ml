@@ -42,7 +42,7 @@ let loop_factorial =
 let main =
   scope "main" 0
     [
-      ("", [ Const (0, value 5); Call (1, "loop_factorial", [ 0 ]); Return 1 ]);
+      ("", [ Const (0, value 5); Call (1, "recursive_factorial", [ 0 ]); Return 1 ]);
     ]
 
 let factorial_test =
