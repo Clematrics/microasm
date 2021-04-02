@@ -2,6 +2,11 @@
 - Improve the pretty-printer of the interpreter state
 - Complete debugging commands
 - Add instruction annotations (breakpoints, checks, ...)
-- documentation
-- tests
-- clean memory from local registers on returns
+- Documentation
+- Tests
+- Clean memory from local registers on returns
+- Check correctness of constraints (with tests?)
+- More ergonomic solver:
+	- read model
+	- add solver constraints
+	- iterate on models

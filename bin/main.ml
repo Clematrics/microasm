@@ -1,6 +1,7 @@
 open Microasm.Base
 open Microasm.Build
 open Microasm.Interpreter
+open Microasm.Solver
 
 let recursive_factorial =
   scope "recursive_factorial" 1
@@ -47,7 +48,23 @@ let main =
 let factorial_test =
   program ("main", [ main; recursive_factorial; loop_factorial ])
 
+(* let () = *)
+let engine = new execution ~enable_trace:true factorial_test
+
 let () =
-  let engine = new execution factorial_test in
   engine#execute Continue;
   Printf.printf "%Lu\n" (engine#result ())
+
+let full_trace = engine#trace ()
+
+let trace = List.tl full_trace
+
+let model, map = smt_converter trace
+
+let get r =
+  let var = RegMap.find r map in
+  match Z3.Model.get_const_interp_e model var with
+  | None -> raise (Invalid_argument "Variable not found in model")
+  | Some expr -> Z3.Expr.to_string expr
+
+let values = List.init (RegMap.cardinal map) get
