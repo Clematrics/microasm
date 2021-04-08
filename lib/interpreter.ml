@@ -30,6 +30,7 @@ type position = int * Block.t * Scope.t
 type command =
   | Continue
   | Next of int
+  | Step
   | StepInto
   | StepOut
   | Stop
@@ -45,7 +46,11 @@ class execution ?(enable_trace = false) program =
 
     val mutable finished = false
 
+    val mutable interrupted = false
+
     val mutable call_stack = []
+
+    val mutable call_stack_height = 0
 
     val mutable local_reg_file = RegisterFile.empty
 
@@ -90,136 +95,163 @@ class execution ?(enable_trace = false) program =
     when one of the registers is not yet created in memory.
     It could also happen because there is no static analysis yet *)
 
+    method private push_stack call =
+      call_stack <- call :: call_stack;
+      call_stack_height <- call_stack_height + 1
+
+    method private pop_stack () =
+      match call_stack with
+      | [] -> None
+      | hd :: tl ->
+          call_stack <- tl;
+          call_stack_height <- call_stack_height - 1;
+          Some hd
+
+    method private current_instr () =
+      let i, block, _ = position in
+      block#instruction i
+
     method private step_once () =
       let i, block, scope = position in
-      let instr = block#instruction i in
+      let instr = self#current_instr () in
       position <- (i + 1, block, scope);
-      let instr_trace =
-        match instr with
-        | Const (d, value) ->
-            let grd = self#set_value d value in
-            TConst (grd, value)
-        | BinOp (op, d, r1, r2) ->
-            let v1, gr1 = self#get_value r1 and v2, gr2 = self#get_value r2 in
-            let v =
-              match op with
-              | Add -> Int64.add v1 v2
-              | Sub -> Int64.sub v1 v2
-              | Mul -> Int64.mul v1 v2
-              | Div -> (
-                  try Int64.div v1 v2
-                  with _ ->
-                    raise (Division_by_zero (i, (block#name, scope#name))))
-              | Rem -> (
-                  try Int64.rem v1 v2
-                  with _ ->
-                    raise (Division_by_zero (i, (block#name, scope#name))))
-              | Udiv -> (
-                  try Int64.unsigned_div v1 v2
-                  with _ ->
-                    raise (Division_by_zero (i, (block#name, scope#name))))
-              | Urem -> (
-                  try Int64.unsigned_rem v1 v2
-                  with _ ->
-                    raise (Division_by_zero (i, (block#name, scope#name))))
-              | And -> Int64.logand v1 v2
-              | Or -> Int64.logor v1 v2
-              | Xor -> Int64.logxor v1 v2
-            in
-            let grd = self#set_value d v in
-            TBinOp (op, grd, gr1, gr2)
-        | Not (d, r) ->
-            let v, gr1 = self#get_value r in
-            let grd = self#set_value d (Int64.lognot v) in
-            TNot (grd, gr1)
-        | Branch next_block ->
-            previous_block <- Some block;
-            position <- (0, scope#block next_block, scope);
-            TBranch next_block
-        | BranchIfZero (r, next_block) ->
-            let v, gr = self#get_value r in
-            let condition = Int64.equal v Int64.zero in
-            if condition then (
-              previous_block <- Some block;
-              position <- (0, scope#block next_block, scope));
-            TBranchIfZero (gr, next_block, if condition then Taken else NotTaken)
-        | BranchIfLess (r1, r2, next_block) ->
-            let v1, gr1 = self#get_value r1 and v2, gr2 = self#get_value r2 in
-            let condition = Int64.compare v1 v2 < 0 in
-            if condition then (
-              previous_block <- Some block;
-              position <- (0, scope#block next_block, scope));
-            TBranchIfLess
-              (gr1, gr2, next_block, if condition then Taken else NotTaken)
-        | BranchIfULess (r1, r2, next_block) ->
-            let v1, gr1 = self#get_value r1 and v2, gr2 = self#get_value r2 in
-            let condition = Int64.unsigned_compare v1 v2 < 0 in
-            if condition then (
-              previous_block <- Some block;
-              position <- (0, scope#block next_block, scope));
-            TBranchIfULess
-              (gr1, gr2, next_block, if condition then Taken else NotTaken)
-        | Phi (d, name, r1, r2) ->
-            let take_first =
-              (function
-                | Some scope when scope#name = name -> true | _ -> false)
-                previous_block
-            in
-            let get_value_alt r =
-              try
+      match instr with
+      | Command `EnableTrace -> self#execute EnableTrace
+      | Command `DisableTrace -> self#execute DisableTrace
+      | Command `Breakpoint -> interrupted <- true
+      | _ ->
+          let instr_trace =
+            match instr with
+            | Const (d, value) ->
+                let grd = self#set_value d value in
+                TConst (grd, value)
+            | BinOp (op, d, r1, r2) ->
+                let v1, gr1 = self#get_value r1
+                and v2, gr2 = self#get_value r2 in
+                let v =
+                  match op with
+                  | Add -> Int64.add v1 v2
+                  | Sub -> Int64.sub v1 v2
+                  | Mul -> Int64.mul v1 v2
+                  | Div -> (
+                      try Int64.div v1 v2
+                      with _ ->
+                        raise (Division_by_zero (i, (block#name, scope#name))))
+                  | Rem -> (
+                      try Int64.rem v1 v2
+                      with _ ->
+                        raise (Division_by_zero (i, (block#name, scope#name))))
+                  | Udiv -> (
+                      try Int64.unsigned_div v1 v2
+                      with _ ->
+                        raise (Division_by_zero (i, (block#name, scope#name))))
+                  | Urem -> (
+                      try Int64.unsigned_rem v1 v2
+                      with _ ->
+                        raise (Division_by_zero (i, (block#name, scope#name))))
+                  | And -> Int64.logand v1 v2
+                  | Or -> Int64.logor v1 v2
+                  | Xor -> Int64.logxor v1 v2
+                in
+                let grd = self#set_value d v in
+                TBinOp (op, grd, gr1, gr2)
+            | Not (d, r) ->
+                let v, gr1 = self#get_value r in
+                let grd = self#set_value d (Int64.lognot v) in
+                TNot (grd, gr1)
+            | Branch next_block ->
+                previous_block <- Some block;
+                position <- (0, scope#block next_block, scope);
+                TBranch next_block
+            | BranchIfZero (r, next_block) ->
                 let v, gr = self#get_value r in
-                (v, Some gr)
-              with Not_found -> (Int64.zero, None)
-            in
-            let v1, gr1 = get_value_alt r1 and v2, gr2 = get_value_alt r2 in
-            let grd = self#set_value d (if take_first then v1 else v2) in
-            TPhi
-              ( grd,
-                name,
-                gr1,
-                gr2,
-                if take_first then FirstSelected else OtherSelected )
-        | Call (d, name, args) ->
-            (* Local copy of args *)
-            let args_value, grs =
-              List.split @@ List.map (fun r -> self#get_value r) args
-            in
-            (* Saving local register file and caller status *)
-            call_stack <-
-              ( local_reg_file,
-                (i + 1, (block#name, scope#name)),
-                d,
-                previous_block )
-              :: call_stack;
-            (* Creating a new local register file for the callee *)
-            local_reg_file <- RegisterFile.empty;
-            let grds = List.mapi (fun i v -> self#set_value i v) args_value in
-            let new_scope = program#scope name in
-            position <- (0, new_scope#entry_block, new_scope);
-            previous_block <- None;
-            TCall (grds, name, grs)
-        | Return r -> (
-            let ret_value, gr1 = self#get_value r in
-            match call_stack with
-            | [] ->
-                return_value <- ret_value;
-                self#execute Stop;
-                TStop gr1
-            | (old_reg_file, instr_ref, d, prev_block) :: tail ->
-                RegisterFile.iter
-                  (fun _ gr -> Memory.remove memory gr)
-                  local_reg_file;
-                (* Deleting global registers linked to this scope *)
-                call_stack <- tail;
-                local_reg_file <- old_reg_file;
-                let i, (block_name, scope_name) = instr_ref in
-                let new_scope = program#scope scope_name in
-                position <- (i, new_scope#block block_name, new_scope);
-                previous_block <- prev_block;
-                let grd = self#set_value d ret_value in
-                TReturn (grd, gr1))
-      in
-      if enable_trace then trace <- instr_trace :: trace
+                let condition = Int64.equal v Int64.zero in
+                if condition then (
+                  previous_block <- Some block;
+                  position <- (0, scope#block next_block, scope));
+                TBranchIfZero
+                  (gr, next_block, if condition then Taken else NotTaken)
+            | BranchIfLess (r1, r2, next_block) ->
+                let v1, gr1 = self#get_value r1
+                and v2, gr2 = self#get_value r2 in
+                let condition = Int64.compare v1 v2 < 0 in
+                if condition then (
+                  previous_block <- Some block;
+                  position <- (0, scope#block next_block, scope));
+                TBranchIfLess
+                  (gr1, gr2, next_block, if condition then Taken else NotTaken)
+            | BranchIfULess (r1, r2, next_block) ->
+                let v1, gr1 = self#get_value r1
+                and v2, gr2 = self#get_value r2 in
+                let condition = Int64.unsigned_compare v1 v2 < 0 in
+                if condition then (
+                  previous_block <- Some block;
+                  position <- (0, scope#block next_block, scope));
+                TBranchIfULess
+                  (gr1, gr2, next_block, if condition then Taken else NotTaken)
+            | Phi (d, name, r1, r2) ->
+                let take_first =
+                  (function
+                    | Some scope when scope#name = name -> true | _ -> false)
+                    previous_block
+                in
+                let get_value_alt r =
+                  try
+                    let v, gr = self#get_value r in
+                    (v, Some gr)
+                  with Not_found -> (Int64.zero, None)
+                in
+                let v1, gr1 = get_value_alt r1 and v2, gr2 = get_value_alt r2 in
+                let grd = self#set_value d (if take_first then v1 else v2) in
+                TPhi
+                  ( grd,
+                    name,
+                    gr1,
+                    gr2,
+                    if take_first then FirstSelected else OtherSelected )
+            | Call (d, name, args) ->
+                (* Local copy of args *)
+                let args_value, grs =
+                  List.split @@ List.map (fun r -> self#get_value r) args
+                in
+                (* Saving local register file and caller status *)
+                self#push_stack
+                  ( local_reg_file,
+                    (i + 1, (block#name, scope#name)),
+                    d,
+                    previous_block );
+                (* Creating a new local register file for the callee *)
+                local_reg_file <- RegisterFile.empty;
+                let grds =
+                  List.mapi (fun i v -> self#set_value i v) args_value
+                in
+                let new_scope = program#scope name in
+                position <- (0, new_scope#entry_block, new_scope);
+                previous_block <- None;
+                TCall (grds, name, grs)
+            | Return r -> (
+                let ret_value, gr1 = self#get_value r in
+                match self#pop_stack () with
+                | None ->
+                    return_value <- ret_value;
+                    self#execute Stop;
+                    TStop gr1
+                | Some (old_reg_file, instr_ref, d, prev_block) ->
+                    RegisterFile.iter
+                      (fun _ gr -> Memory.remove memory gr)
+                      local_reg_file;
+                    (* Deleting global registers linked to this scope *)
+                    local_reg_file <- old_reg_file;
+                    let i, (block_name, scope_name) = instr_ref in
+                    let new_scope = program#scope scope_name in
+                    position <- (i, new_scope#block block_name, new_scope);
+                    previous_block <- prev_block;
+                    let grd = self#set_value d ret_value in
+                    TReturn (grd, gr1))
+            | Command _ -> assert false
+            (* This should not be reachable, as it is handled by execute *)
+          in
+          if enable_trace then trace <- instr_trace :: trace
 
     method print fmt =
       Format.pp_open_vbox fmt 0;
@@ -238,7 +270,7 @@ class execution ?(enable_trace = false) program =
       in
       let rec pp_stack limit fmt = function
         | [] -> Format.fprintf fmt ""
-        | _ when limit = 0 -> Format.fprintf fmt "..."
+        | _ when limit = 0 -> Format.fprintf fmt "@ ..."
         | hd :: tl ->
             Format.fprintf fmt "@ %a%a" frame hd (pp_stack (limit - 1)) tl
       in
@@ -255,7 +287,7 @@ class execution ?(enable_trace = false) program =
             Format.fprintf fmt "@ %a" reg (loc, glob, value))
           local_reg_file
       in
-      Format.fprintf fmt "@[<v 4>Registers (local id, global id, value):%t@]@ "
+      Format.fprintf fmt "@[<v 4>Registers (local id, global id, value (s|u)):%t@]@ "
         regs;
       let i, block, scope = position in
       let pp_code fmt view_size =
@@ -281,18 +313,30 @@ class execution ?(enable_trace = false) program =
       else
         match command with
         | Continue ->
-            while not finished do
+            interrupted <- false;
+            while (not finished) && not interrupted do
               self#step_once ()
             done
         | Next n ->
+            interrupted <- false;
             let rec loop i =
-              if i > 0 && not finished then (
-                self#step_once ();
+              if i > 0 && (not finished) && not interrupted then (
+                (match self#current_instr () with
+                | Call _ ->
+                    self#step_once ();
+                    self#execute StepOut
+                | _ -> self#step_once ());
                 loop (i - 1))
             in
             loop n
-        | StepInto -> () (* TODO: *)
-        | StepOut -> () (* TODO: *)
+        | Step -> self#execute (Next 1)
+        | StepInto -> self#step_once ()
+        | StepOut ->
+            interrupted <- false;
+            let stack_height = List.length call_stack in
+            while not finished && not interrupted && call_stack_height >= stack_height do
+              self#step_once ()
+            done
         | Stop -> finished <- true
         | EnableTrace -> enable_trace <- true
         | DisableTrace -> enable_trace <- false

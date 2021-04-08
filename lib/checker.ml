@@ -17,6 +17,7 @@ let check_instruction (reg_set, errors) scope_dictionary block_dictionary
     | Phi (d, name, _, _) -> (Some d, Some name, None)
     | Call (d, name, args) -> (Some d, None, Some (name, List.length args))
     | Return _ -> (None, None, None)
+    | Command _ -> (None, None, None)
   in
   let check_register_duplicate (reg_set, errors) =
     Option.fold ~none:(reg_set, errors)

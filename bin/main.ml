@@ -10,6 +10,7 @@ let recursive_factorial =
         [
           Const (1, value 2);
           Const (2, value 1);
+          Command `Breakpoint;
           BranchIfLess (0, 1, "return");
           Branch "main_case";
         ] );
@@ -42,7 +43,14 @@ let loop_factorial =
 let main =
   scope "main" 0
     [
-      ("", [ Const (0, value 5); Call (1, "recursive_factorial", [ 0 ]); Return 1 ]);
+      ( "",
+        [
+          Const (0, value 5);
+          Command `EnableTrace;
+          Call (1, "recursive_factorial", [ 0 ]);
+          Command `DisableTrace;
+          Return 1;
+        ] );
     ]
 
 let factorial_test =

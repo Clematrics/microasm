@@ -1,5 +1,4 @@
-- Complete debugging commands
-- Add instruction annotations (breakpoints, checks, ...)
+- Add instruction annotations (checks at runtime, ...)
 - Documentation
 - Tests
 - Check correctness of constraints (with tests?)

@@ -39,55 +39,88 @@ type trace_instr =
       A block which does not end with a branch or a return instruction returns implicitly zero *)
   | TStop of Register.t
 
+module ConstList = struct
+  type zero = unit
+
+  type 'size succ = 'size * unit
+
+  type ('elt, 'size) t =
+    | [] : ('elt, zero) t
+    | ( :: ) : 'elt * ('elt, 'size) t -> ('elt, 'size succ) t
+
+  let fold_left_map f acc clist =
+    let acc = ref acc in
+    let rec internal : type size. (_, size) t -> (_, size) t = function
+      | [] -> []
+      | hd :: tl ->
+          let acc', b = f !acc hd in
+          acc := acc';
+          b :: internal tl
+    in
+    (!acc, internal clist)
+end
+
 let linearize trace =
   let next_lin_reg = ref 0 in
   let linearize_instruction reg_file instr =
-    let linearize_input input = RegisterFile.find input reg_file in
-    let linearize_output reg_file output =
-      let new_lin_reg = !next_lin_reg in
-      incr next_lin_reg;
-      (RegisterFile.add output new_lin_reg reg_file, new_lin_reg)
+    let linearize_reg reg_file reg =
+      match RegisterFile.find_opt reg reg_file with
+      | Some p -> (reg_file, p)
+      | None ->
+          let new_lin_reg = !next_lin_reg in
+          incr next_lin_reg;
+          (RegisterFile.add reg new_lin_reg reg_file, new_lin_reg)
+    in
+    let linearize_const_list clist =
+      (* Only used when everything can be applied to the base reg_file.
+         Do not use when you want to use a different register file than the one given in parameter *)
+      ConstList.fold_left_map linearize_reg reg_file clist
     in
     let new_reg_file, new_instr =
       match instr with
       | TConst (d, v) ->
-          let file, ld = linearize_output reg_file d in
+          let file, [ ld ] = linearize_const_list [ d ] in
           (file, TConst (ld, v))
       | TBinOp (op, d, r1, r2) ->
-          let lr1 = linearize_input r1
-          and lr2 = linearize_input r2
-          and file, ld = linearize_output reg_file d in
+          let file, [ lr1; lr2; ld ] = linearize_const_list [ r1; r2; d ] in
           (file, TBinOp (op, ld, lr1, lr2))
       | TNot (d, r) ->
-          let lr = linearize_input r
-          and file, ld = linearize_output reg_file d in
+          let file, [ lr; ld ] = linearize_const_list [ r; d ] in
           (file, TNot (ld, lr))
       | TBranch t -> (reg_file, TBranch t)
       | TBranchIfZero (r, t, a) ->
-          let lr = linearize_input r in
-          (reg_file, TBranchIfZero (lr, t, a))
+          let file, [ lr ] = linearize_const_list [ r ] in
+          (file, TBranchIfZero (lr, t, a))
       | TBranchIfLess (r1, r2, t, a) ->
-          let lr1 = linearize_input r1 and lr2 = linearize_input r2 in
-          (reg_file, TBranchIfLess (lr1, lr2, t, a))
+          let file, [ lr1; lr2 ] = linearize_const_list [ r1; r2 ] in
+          (file, TBranchIfLess (lr1, lr2, t, a))
       | TBranchIfULess (r1, r2, t, a) ->
-          let lr1 = linearize_input r1 and lr2 = linearize_input r2 in
-          (reg_file, TBranchIfULess (lr1, lr2, t, a))
+          let file, [ lr1; lr2 ] = linearize_const_list [ r1; r2 ] in
+          (file, TBranchIfULess (lr1, lr2, t, a))
       | TPhi (d, s, r1, r2, a) ->
-          let lr1 = Option.map linearize_input r1
-          and lr2 = Option.map linearize_input r2
-          and file, ld = linearize_output reg_file d in
-          (file, TPhi (ld, s, lr1, lr2, a))
+          let opt file =
+            Option.fold ~none:(file, None) ~some:(fun r ->
+                let file', r = linearize_reg file r in
+                (file', Some r))
+          in
+          let file, [ lr1; lr2 ] =
+            ConstList.fold_left_map opt reg_file [ r1; r2 ]
+          in
+          let file', ld = linearize_reg file d in
+          (file', TPhi (ld, s, lr1, lr2, a))
       | TCall (ds, t, rs) ->
-          let lrs = List.map linearize_input rs
-          and file, lds = List.fold_left_map linearize_output reg_file ds in
+          let file, [ lrs; lds ] =
+            ConstList.fold_left_map
+              (List.fold_left_map linearize_reg)
+              reg_file [ rs; ds ]
+          in
           (file, TCall (lds, t, lrs))
       | TReturn (d, r) ->
-          let lr = linearize_input r
-          and file, ld = linearize_output reg_file d in
+          let file, [ lr; ld ] = linearize_const_list [ r; d ] in
           (file, TReturn (ld, lr))
       | TStop r ->
-          let lr = linearize_input r in
-          (reg_file, TStop lr)
+          let file, [ lr ] = linearize_const_list [ r ] in
+          (file, TStop lr)
     in
     (new_reg_file, new_instr)
   in
