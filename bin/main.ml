@@ -10,7 +10,7 @@ let recursive_factorial =
         [
           Const (1, value 2);
           Const (2, value 1);
-          Command `Breakpoint;
+          (* Command `Breakpoint; *)
           BranchIfLess (0, 1, "return");
           Branch "main_case";
         ] );
@@ -76,3 +76,12 @@ let get r =
   | Some expr -> Z3.Expr.to_string expr
 
 let values = List.init (RegMap.cardinal map) get
+
+let solver = new solver
+
+let assoc_list = solver#add_trace trace;
+  match solver#generate_model () with
+  | Satisfiable model -> List.of_seq (RegMap.to_seq model)
+  | _ -> raise (Invalid_argument "Not satisfiable")
+
+let result = solver#exclude_last (); solver#generate_model ()

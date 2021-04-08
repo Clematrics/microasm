@@ -1,10 +1,6 @@
 open Base
 open Trace
 open Z3
-open Z3.BitVector
-open Z3.Boolean
-open Z3.Solver
-open Z3.Expr
 module RegMap = Map.Make (Register)
 
 let reg r = Printf.sprintf "r%d" r
@@ -52,9 +48,9 @@ let smt_of_instr ctx solver reg_map tinstr =
   in
   match tinstr with
   | TConst (d, v) ->
-      let cst = mk_numeral_string ctx (Int64.to_string v) sort in
+      let cst = Z3.Expr.mk_numeral_string ctx (Int64.to_string v) sort in
       let dest = get_reg d in
-      Solver.add solver [ mk_eq ctx dest cst ]
+      Solver.add solver [ Boolean.mk_eq ctx dest cst ]
   | TBinOp (op, d, r1, r2) ->
       let r1 = get_reg r1 and r2 = get_reg r2 and dest = get_reg d in
       let op_expr =
@@ -70,56 +66,56 @@ let smt_of_instr ctx solver reg_map tinstr =
         | Or -> BitVector.mk_or ctx r1 r2
         | Xor -> BitVector.mk_xor ctx r1 r2
       in
-      Solver.add solver [ mk_eq ctx dest op_expr ]
+      Solver.add solver [ Boolean.mk_eq ctx dest op_expr ]
   | TNot (d, r) ->
       let src = get_reg r and dest = get_reg d in
-      Solver.add solver [ mk_eq ctx dest (BitVector.mk_not ctx src) ]
+      Solver.add solver [ Boolean.mk_eq ctx dest (BitVector.mk_not ctx src) ]
   | TBranch _ -> ()
   | TBranchIfZero (r, _, a) ->
       let src = get_reg r in
-      let zero = mk_numeral_int ctx 0 sort in
+      let zero = Expr.mk_numeral_int ctx 0 sort in
       let expr =
         match a with
-        | Taken -> mk_eq ctx src zero
-        | NotTaken -> mk_distinct ctx [ src; zero ]
+        | Taken -> Boolean.mk_eq ctx src zero
+        | NotTaken -> Boolean.mk_distinct ctx [ src; zero ]
       in
       Solver.add solver [ expr ]
   | TBranchIfLess (r1, r2, _, a) ->
       let r1 = get_reg r1 and r2 = get_reg r2 in
       let expr =
-        match a with Taken -> mk_slt ctx r1 r2 | NotTaken -> mk_sge ctx r1 r2
+        match a with Taken -> BitVector.mk_slt ctx r1 r2 | NotTaken -> BitVector.mk_sge ctx r1 r2
       in
       Solver.add solver [ expr ]
   | TBranchIfULess (r1, r2, _, a) ->
       let r1 = get_reg r1 and r2 = get_reg r2 in
       let expr =
-        match a with Taken -> mk_ult ctx r1 r2 | NotTaken -> mk_uge ctx r1 r2
+        match a with Taken -> BitVector.mk_ult ctx r1 r2 | NotTaken -> BitVector.mk_uge ctx r1 r2
       in
       Solver.add solver [ expr ]
   | TPhi (d, _, r1, r2, a) ->
       let dest = get_reg d in
       let r = match a with FirstSelected -> r1 | OtherSelected -> r2 in
       let src = get_reg (Option.get r) in
-      let expr = mk_eq ctx dest src in
+      let expr = Boolean.mk_eq ctx dest src in
       Solver.add solver [ expr ]
   | TCall (ds, _, rs) ->
       let exprs =
         List.rev_map2
           (fun d r ->
             let src = get_reg r and dest = get_reg d in
-            mk_eq ctx dest src)
+            Boolean.mk_eq ctx dest src)
           ds rs
       in
       Solver.add solver exprs
   | TReturn (d, r) ->
       let src = get_reg r and dest = get_reg d in
-      Solver.add solver [ mk_eq ctx dest src ]
+      Solver.add solver [ Boolean.mk_eq ctx dest src ]
   | TStop _ -> ()
 
 let smt_converter trace =
   let cfg = [ ("model", "true"); ("proof", "false") ] in
   let ctx = mk_context cfg in
-  let solver = mk_simple_solver ctx in
+  let solver = Solver.mk_simple_solver ctx in
   let reg_map = List.fold_left (create_var ctx) RegMap.empty trace in
   List.iter (smt_of_instr ctx solver reg_map) trace;
   match Solver.check solver [] with
@@ -130,3 +126,52 @@ let smt_converter trace =
       match Solver.get_model solver with
       | None -> assert false
       | Some model -> (model, reg_map))
+
+type solver_result = NoSolution | Unknown | Satisfiable of Int64.t RegMap.t (* TODO: make specific type? *)
+
+class solver =
+let cfg = [ ("model", "true"); ("proof", "false") ] in
+let ctx = mk_context cfg in
+let solver = Solver.mk_simple_solver ctx in
+let sort_64 = BitVector.mk_sort ctx 64 in
+object (self)
+  val solver = solver
+
+  val mutable reg_map = RegMap.empty
+
+  val mutable model = RegMap.empty
+
+  method add_trace trace =
+    (* TODO: add hash function *)
+    reg_map <- List.fold_left (create_var ctx) reg_map trace;
+    List.iter (smt_of_instr ctx solver reg_map) trace
+
+  method private decompose_model raw_model =
+    let value_of_string str =
+      let correct_str = String.concat "" [ "0"; String.sub str 1 (String.length str - 1)] in
+      Int64.of_string correct_str
+    in
+    model <- RegMap.map (fun var ->
+      match Z3.Model.get_const_interp_e raw_model var with
+      | None -> assert false
+      | Some expr -> value_of_string @@ Z3.Expr.to_string expr) reg_map;
+    model
+
+  method generate_model () =
+    match Solver.check solver [] with
+    | UNSATISFIABLE -> NoSolution
+    | UNKNOWN -> Unknown
+    | SATISFIABLE -> (
+        match Solver.get_model solver with
+        | None -> assert false
+        | Some model -> Satisfiable (self#decompose_model model))
+
+  method exclude_last () =
+    let equalities = Stdlib.Seq.map (fun (reg, value) ->
+      let const = Expr.mk_numeral_string ctx (Int64.to_string value) sort_64 in
+      let reg_const = RegMap.find reg reg_map in
+      Boolean.mk_distinct ctx [const; reg_const]) (RegMap.to_seq model) in
+    let expr = Boolean.mk_or ctx (List.of_seq equalities) in
+    Solver.add solver [expr]
+
+end
