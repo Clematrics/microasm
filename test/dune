@@ -1,2 +1,3 @@
-(test
- (name microasm))
+(tests
+ (names instr_semantic solver_semantic)
+ (libraries microasm))
