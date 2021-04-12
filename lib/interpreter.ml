@@ -27,6 +27,8 @@ type call_stack =
 
 type position = int * Block.t * Scope.t
 
+type register_found = Found of (Int64.t * Register.t) | NotFound of Register.t
+
 type command =
   | Continue
   | Next of int
@@ -196,18 +198,29 @@ class execution ?(enable_trace = false) program =
                     previous_block
                 in
                 let get_value_alt r =
-                  try
-                    let v, gr = self#get_value r in
-                    (v, Some gr)
-                  with Not_found -> (Int64.zero, None)
+                  try Found (self#get_value r) with Not_found -> NotFound r
                 in
-                let v1, gr1 = get_value_alt r1 and v2, gr2 = get_value_alt r2 in
-                let grd = self#set_value d (if take_first then v1 else v2) in
+                let extract_value = function
+                  | Found (v, _) -> v
+                  | NotFound r ->
+                      raise
+                        (Undefined_register (r, (i, (block#name, scope#name))))
+                in
+                let extract_greg = function
+                  | Found (_, gr) -> Some gr
+                  | _ -> None
+                in
+                let opt1 = get_value_alt r1 and opt2 = get_value_alt r2 in
+                let grd =
+                  self#set_value d
+                    (if take_first then extract_value opt1
+                    else extract_value opt2)
+                in
                 TPhi
                   ( grd,
                     name,
-                    gr1,
-                    gr2,
+                    extract_greg opt1,
+                    extract_greg opt2,
                     if take_first then FirstSelected else OtherSelected )
             | Call (d, name, args) ->
                 (* Local copy of args *)
@@ -287,8 +300,8 @@ class execution ?(enable_trace = false) program =
             Format.fprintf fmt "@ %a" reg (loc, glob, value))
           local_reg_file
       in
-      Format.fprintf fmt "@[<v 4>Registers (local id, global id, value (s|u)):%t@]@ "
-        regs;
+      Format.fprintf fmt
+        "@[<v 4>Registers (local id, global id, value (s|u)):%t@]@ " regs;
       let i, block, scope = position in
       let pp_code fmt view_size =
         let block_size = Array.length block#instructions in
@@ -334,7 +347,10 @@ class execution ?(enable_trace = false) program =
         | StepOut ->
             interrupted <- false;
             let stack_height = List.length call_stack in
-            while not finished && not interrupted && call_stack_height >= stack_height do
+            while
+              (not finished) && (not interrupted)
+              && call_stack_height >= stack_height
+            do
               self#step_once ()
             done
         | Stop -> finished <- true

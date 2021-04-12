@@ -11,6 +11,8 @@ type trace_instr =
   | TConst of Register.t * Int64.t  (** Const d, c : loads c into d *)
   | TBinOp of bin_op * Register.t * Register.t * Register.t
   | TNot of Register.t * Register.t  (** Not d, r : bitwise negation *)
+  | TLoad of Register.t * Register.t * Int64.t (** Load d, addr, val : load zero to d, and addr = val *)
+  | TStore of Register.t * Register.t * Int64.t  (** Store r, addr, val : store r to addr, with addr = val *)
   | TBranch of BlockId.t
       (** Branch target : jumps to the block `target`. Puts the current block name as the previous block encountered *)
   | TBranchIfZero of Register.t * BlockId.t * cond_annotation
@@ -87,6 +89,12 @@ let linearize trace =
       | TNot (d, r) ->
           let file, [ lr; ld ] = linearize_const_list [ r; d ] in
           (file, TNot (ld, lr))
+      | TLoad (d, addr, value) ->
+          let file, [ laddr; ld ] = linearize_const_list [ addr; d ] in
+          (file, TLoad (ld, laddr, value))
+      | TStore (r, addr, value) ->
+          let file, [ laddr; lr ] = linearize_const_list [ addr; r ] in
+          (file, TStore (lr, laddr, value))
       | TBranch t -> (reg_file, TBranch t)
       | TBranchIfZero (r, t, a) ->
           let file, [ lr ] = linearize_const_list [ r ] in

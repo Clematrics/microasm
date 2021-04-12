@@ -18,6 +18,8 @@ let create_var ctx reg_map tinstr =
   | TBinOp (_, d, r1, r2) ->
       make_const ctx r1 reg_map |> make_const ctx r2 |> make_const ctx d
   | TNot (d, r) -> make_const ctx r reg_map |> make_const ctx d
+  | TLoad (d, addr, _) -> make_const ctx addr reg_map |> make_const ctx d
+  | TStore (r, addr, _) -> make_const ctx addr reg_map |> make_const ctx r
   | TBranch _ -> reg_map
   | TBranchIfZero (r, _, _) -> make_const ctx r reg_map
   | TBranchIfLess (r1, r2, _, _) ->
@@ -48,7 +50,7 @@ let smt_of_instr ctx solver reg_map tinstr =
   in
   match tinstr with
   | TConst (d, v) ->
-      let cst = Z3.Expr.mk_numeral_string ctx (Int64.to_string v) sort in
+      let cst = Expr.mk_numeral_string ctx (Int64.to_string v) sort in
       let dest = get_reg d in
       Solver.add solver [ Boolean.mk_eq ctx dest cst ]
   | TBinOp (op, d, r1, r2) ->
@@ -70,6 +72,12 @@ let smt_of_instr ctx solver reg_map tinstr =
   | TNot (d, r) ->
       let src = get_reg r and dest = get_reg d in
       Solver.add solver [ Boolean.mk_eq ctx dest (BitVector.mk_not ctx src) ]
+  | TLoad (_, addr, value) ->
+      let addr = get_reg addr and cst = Expr.mk_numeral_string ctx (Int64.to_string value) sort in
+      Solver.add solver [ Boolean.mk_eq ctx addr cst ] (* There is no information about d *)
+  | TStore (_, addr, value) ->
+      let addr = get_reg addr and cst = Expr.mk_numeral_string ctx (Int64.to_string value) sort in
+      Solver.add solver [ Boolean.mk_eq ctx addr cst ] (* There is no information about r *)
   | TBranch _ -> ()
   | TBranchIfZero (r, _, a) ->
       let src = get_reg r in
@@ -141,6 +149,8 @@ object (self)
 
   val mutable model = RegMap.empty
 
+  method solver = solver
+
   method add_trace trace =
     (* TODO: add hash function *)
     reg_map <- List.fold_left (create_var ctx) reg_map trace;
@@ -153,8 +163,8 @@ object (self)
     in
     model <- RegMap.map (fun var ->
       match Z3.Model.get_const_interp_e raw_model var with
-      | None -> assert false
-      | Some expr -> value_of_string @@ Z3.Expr.to_string expr) reg_map;
+      | None -> Printf.printf "Manque %s" (Z3.Expr.to_string var); Int64.zero (* assert false *)
+      | Some expr -> value_of_string @@ Expr.to_string expr) reg_map;
     model
 
   method generate_model () =
