@@ -77,8 +77,8 @@ let test_branch_less =
   assert (run (prog (value 100) (value 0)) = value 0);
   assert (run (prog (value (-10)) (value 10)) = value 1);
   assert (run (prog (value 10) (value (-10))) = value 0);
-  assert (run (prog (value 100) (Int64.min_int)) = value 0);
-  assert (run (prog (Int64.min_int) (value 100)) = value 1);
+  assert (run (prog (value 100) Int64.min_int) = value 0);
+  assert (run (prog Int64.min_int (value 100)) = value 1);
   assert (run (prog Int64.max_int Int64.min_int) = value 0);
   assert (run (prog Int64.min_int Int64.max_int) = value 1)
 
@@ -104,7 +104,7 @@ let test_branch_uless =
   assert (run (prog (value 0) (value 100)) = value 1);
   assert (run (prog (value 100) (value 0)) = value 0);
   assert (run (prog (value (-10)) (value 10)) = value 0);
-  assert (run (prog (value 100) (Int64.min_int)) = value 1);
+  assert (run (prog (value 100) Int64.min_int) = value 1);
   assert (run (prog Int64.max_int Int64.min_int) = value 1)
 
 let test_phi =
@@ -112,8 +112,8 @@ let test_phi =
     let scope =
       scope "test" 0
         [
-          ("a", [ Const (0, value 0); Branch "b"]);
-          ("b", [ Const (1, value 1); Branch "result"]);
+          ("a", [ Const (0, value 0); Branch "b" ]);
+          ("b", [ Const (1, value 1); Branch "result" ]);
           ("result", [ Phi (2, "a", 0, 1); Return 2 ]);
         ]
     in
@@ -123,8 +123,8 @@ let test_phi =
     let scope =
       scope "test" 0
         [
-          ("a", [ Const (0, value 0); Branch "b"]);
-          ("b", [ Const (1, value 1); Branch "result"]);
+          ("a", [ Const (0, value 0); Branch "b" ]);
+          ("b", [ Const (1, value 1); Branch "result" ]);
           ("result", [ Phi (2, "b", 1, 0); Return 2 ]);
         ]
     in
@@ -134,8 +134,8 @@ let test_phi =
     let scope =
       scope "test" 0
         [
-          ("a", [ Const (0, value 0); Branch "result"]);
-          ("b", [ Const (1, value 1); Branch "result"]);
+          ("a", [ Const (0, value 0); Branch "result" ]);
+          ("b", [ Const (1, value 1); Branch "result" ]);
           ("result", [ Phi (2, "a", 0, 1); Return 2 ]);
         ]
     in
@@ -145,8 +145,8 @@ let test_phi =
     let scope =
       scope "test" 0
         [
-          ("a", [ Const (0, value 0); Branch "result"]);
-          ("b", [ Const (1, value 1); Branch "result"]);
+          ("a", [ Const (0, value 0); Branch "result" ]);
+          ("b", [ Const (1, value 1); Branch "result" ]);
           ("result", [ Phi (2, "b", 1, 0); Return 2 ]);
         ]
     in
@@ -156,7 +156,7 @@ let test_phi =
     let scope =
       scope "test" 0
         [
-          ("a", [ Const (0, value 0); Branch "result"]);
+          ("a", [ Const (0, value 0); Branch "result" ]);
           ("result", [ Phi (2, "a", 1, 0); Return 2 ]);
         ]
     in
@@ -166,5 +166,7 @@ let test_phi =
   assert (run prog2 = value 1);
   assert (run prog3 = value 0);
   assert (run prog4 = value 0);
-  try let _ = run prog5 in assert false
-  with Undefined_register _ -> ();
+  try
+    let _ = run prog5 in
+    assert false
+  with Undefined_register _ -> ()

@@ -3,6 +3,7 @@ open Microasm.Build
 open Microasm.Interpreter
 open Microasm.Trace
 open Microasm.Solver
+open Microasm.Solver.Default
 
 let recursive_factorial =
   scope "recursive_factorial" 1
