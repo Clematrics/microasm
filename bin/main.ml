@@ -95,9 +95,9 @@ let main =
       ( "",
         [
           Const (0, value 5);
-          Command `EnableTrace;
+          Command EnableTrace;
           Call (1, "recursive_factorial", [ 0 ]);
-          Command `DisableTrace;
+          Command DisableTrace;
           Return 1;
         ] );
     ]

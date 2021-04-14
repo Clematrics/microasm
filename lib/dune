@@ -1,6 +1,7 @@
 (library
+ (public_name microasm)
  (name microasm)
- (modules base checker build trace interpreter solver)
+ (modules base pprint checker build trace interpreter solver)
  (libraries z3))
 
 

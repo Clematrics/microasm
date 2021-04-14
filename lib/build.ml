@@ -90,6 +90,10 @@ module Program = struct
   let make = new program
 end
 
+let scope (name : ScopeId.t) (args_count : int) ?entry
+    (builder_list : block_builder list) =
+  (name, args_count, entry, builder_list)
+
 let program builder =
   let errors = check builder in
   match errors with [] -> Program.make builder | l -> raise (Not_compliant l)

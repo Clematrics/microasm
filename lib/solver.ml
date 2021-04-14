@@ -17,7 +17,6 @@ struct
       RegMap.add r var reg_map
     else reg_map
 
-  (** Create a variable for each register seen in an instruction, event for the source registers *)
   let create_var ctx reg_map tinstr =
     match tinstr with
     | TConst (d, _) -> make_const ctx d reg_map
@@ -218,4 +217,6 @@ struct
     end
 end
 
-module Default = Solver(struct let bit_width = 64 end)
+module Default = Solver (struct
+  let bit_width = 64
+end)

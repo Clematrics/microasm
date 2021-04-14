@@ -1,15 +1,27 @@
 open Base
 
-(* Instruction checks *)
+type not_compliant_reason =
+  | Empty_program
+  | Bad_entry_point of ScopeId.t
+  | Entry_point_has_args of ScopeId.t
+  | Empty_scope of ScopeId.t
+  | Bad_first_block of block_reference
+  | Duplicate_register of Register.t * instruction_reference
+  | Block_not_found of BlockId.t * instruction_reference
+  | Scope_not_found of ScopeId.t * instruction_reference
+  | Invalid_argument_count of int * int * ScopeId.t * instruction_reference
+
+exception Not_compliant of not_compliant_reason list
+
+module IdMap = Map.Make (String)
+module RegSet = Set.Make (Register)
 
 let check_instruction (reg_set, errors) scope_dictionary block_dictionary
     block_ref (no, instruction) =
   let instr_ref = (no, block_ref) in
   let new_reg, block_request, scope_request =
     match instruction with
-    | Const (d, _)
-    | BinOp (_, d, _, _)
-    | Not (d, _) -> (Some d, None, None)
+    | Const (d, _) | BinOp (_, d, _, _) | Not (d, _) -> (Some d, None, None)
     | Branch name -> (None, Some name, None)
     | BranchIfZero (_, name) -> (None, Some name, None)
     | BranchIfLess (_, _, name) -> (None, Some name, None)
@@ -58,8 +70,6 @@ let check_instruction (reg_set, errors) scope_dictionary block_dictionary
   check_register_duplicate (reg_set, errors)
   |> check_block_request |> check_call_request
 
-(* Block checks *)
-
 let check_block (registers, errors) scope_dictionary block_dictionary scope_name
     block_builder =
   let block_name, instrs = block_builder in
@@ -68,8 +78,6 @@ let check_block (registers, errors) scope_dictionary block_dictionary scope_name
     (fun x -> check_instruction x scope_dictionary block_dictionary block_ref)
     (registers, errors)
   @@ List.mapi (fun no i -> (no, i)) instrs
-
-(* Scope checks *)
 
 let check_scope scope_dictionary scope_builder errors =
   let scope_name, args, entry, block_builders = scope_builder in
@@ -87,6 +95,7 @@ let check_scope scope_dictionary scope_builder errors =
           else Bad_first_block (block_name, scope_name) :: errors
   in
   let check_blocks errors =
+    let identity x = x in
     let registers = RegSet.of_list (List.init args identity) in
     let _, errors =
       List.fold_left
@@ -96,8 +105,6 @@ let check_scope scope_dictionary scope_builder errors =
     errors
   in
   check_scope_empty_and_entry errors |> check_blocks
-
-(* Global program checks *)
 
 let check (program_builder : program_builder) =
   let entry, scope_builders = program_builder in

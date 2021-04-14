@@ -1,18 +1,15 @@
 open Base
 open Build
+open Pprint
 open Trace
 
 exception Undefined_scope of ScopeId.t * instruction_reference
-(** Undefined_scope name : indicates that the scope named `name` is missing in the program *)
 
 exception Undefined_block of block_reference * instruction_reference
-(** Undefined_block block_name, scope_name : indicates that the block named `block_named` is missing in the scope `scope_name` *)
 
 exception Undefined_register of Register.t * instruction_reference
-(** Undefined_register reg, block_name, scope_name : indicates that a register was not initialized yet in some block of some scope *)
 
 exception Division_by_zero of instruction_reference
-(** Division_by_zero block_name, scope_name *)
 
 module Memory = Hashtbl.Make (Register)
 module RegisterFile = Map.Make (Register)
@@ -23,7 +20,6 @@ type memory = Int64.t Memory.t
 
 type call_stack =
   (register_file * instruction_reference * Register.t * Block.t option) list
-(** File register, reference to the next instruction, register to place the result of the call into, previous block *)
 
 type position = int * Block.t * Scope.t
 
@@ -92,10 +88,9 @@ class execution ?(enable_trace = false) program =
     method private get_value local_reg =
       let global_reg = RegisterFile.find local_reg local_reg_file in
       (Memory.find memory global_reg, global_reg)
-    (** @raise Not_found
-    This happen when tracing for Phi instructions,
-    when one of the registers is not yet created in memory.
-    It could also happen because there is no static analysis yet *)
+    (** @raise Not_found This happen when tracing for Phi instructions, when one
+        of the registers is not yet created in memory. It could also happen
+        because there is no static analysis yet *)
 
     method private push_stack call =
       call_stack <- call :: call_stack;
@@ -118,9 +113,9 @@ class execution ?(enable_trace = false) program =
       let instr = self#current_instr () in
       position <- (i + 1, block, scope);
       match instr with
-      | Command `EnableTrace -> self#execute EnableTrace
-      | Command `DisableTrace -> self#execute DisableTrace
-      | Command `Breakpoint -> interrupted <- true
+      | Command Base.EnableTrace -> self#execute EnableTrace
+      | Command Base.DisableTrace -> self#execute DisableTrace
+      | Command Base.Breakpoint -> interrupted <- true
       | _ ->
           let instr_trace =
             match instr with
