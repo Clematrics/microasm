@@ -1,9 +1,13 @@
 (library
  (public_name microasm)
  (name microasm)
- (modules base pprint checker build trace interpreter solver)
+ (modules base pprint checker lexer parser build trace interpreter solver)
  (libraries z3))
 
+(menhir
+ (modules parser))
+
+(ocamllex lexer)
 
 ; (env
 ;  (dev
