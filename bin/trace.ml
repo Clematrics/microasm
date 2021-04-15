@@ -1,5 +1,5 @@
 open Microasm.Trace
-open Microasm.Solver
+open Microasm.Solver.Default
 
 let value = Int64.of_int
 

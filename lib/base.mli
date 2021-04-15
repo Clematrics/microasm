@@ -33,9 +33,9 @@ type instr_command =
       (** Commands that can be embedded in a program to affect the interpreter
           when encountered
 
-          - [`EnableTrace] enables tracing starting at the next instruction
-          - [`DisableTrace] disables tracing
-          - [`Breakpoint] breaks the execution and starts the debugger at the
+          - [EnableTrace] enables tracing starting at the next instruction
+          - [DisableTrace] disables tracing
+          - [Breakpoint] breaks the execution and starts the debugger at the
             next instruction *)
 
 (** Binary operations *)

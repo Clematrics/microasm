@@ -8,7 +8,7 @@
 %token ENTRY
 %token EXCL
 %token <Base.instr_command> COMMAND
-// %token <opcode> OPCODE
+// opcodes
 %token CONST
 %token ADD
 %token SUB
@@ -30,7 +30,7 @@
 %token RETURN
 // end opcode
 %token <string> IDENT
-%token <int> NAT
+%token <int> REG
 %token <int64> INT
 %token LINE_END
 %token EOF
@@ -39,45 +39,52 @@
 %%
 
 parse:
-| EOF { raise (Checker.Not_compliant [Checker.Empty_program]) }
-| ENTRY; id = IDENT; LINE_END; scopes = scopes { id, scopes }
+| prog = search_entry { prog }
+
+search_entry:
+| LINE_END; prog = search_entry { prog }
+| ENTRY; id = IDENT; LINE_END+; scopes = scopes { id, scopes }
 
 scopes:
+| scope = scope; scopes = scopes { scope :: scopes }
 | EOF { [] }
-| SCOPE_MARKER; id = IDENT; args = NAT; sep; blocks = blocks; scopes = scopes { (id, args, None, blocks) :: scopes }
+
+scope:
+| SCOPE_MARKER; id = IDENT; args = INT; entry = IDENT?; LINE_END+; blocks = blocks { id, Int64.to_int args, entry, blocks }
 
 blocks:
-| LINE_END { [] }
-| id = IDENT; COLON; sep; instr = instructions; blocks = blocks { (id, instr) :: blocks }
+| block = block; LINE_END*; blocks = blocks { block :: blocks }
+| { [] }
+
+block:
+| id = IDENT; COLON; LINE_END+; instrs = instructions { id, instrs }
 
 instructions:
-| LINE_END { [] }
-| CONST; d = NAT; COMMA; v = INT; sep; instr = instructions { (Const (d, v)) :: instr }
-| ADD; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (Add, d, r1, r2)) :: instr }
-| SUB; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (Sub, d, r1, r2)) :: instr }
-| MUL; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (Mul, d, r1, r2)) :: instr }
-| DIV; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (Div, d, r1, r2)) :: instr }
-| REM; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (Rem, d, r1, r2)) :: instr }
-| UDIV; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (Udiv, d, r1, r2)) :: instr }
-| UREM; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (Urem, d, r1, r2)) :: instr }
-| AND; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (And, d, r1, r2)) :: instr }
-| OR; d = NAT;  COMMA;r1 = NAT;  COMMA;r2 = NAT; sep; instr = instructions { (BinOp (Or, d, r1, r2)) :: instr }
-| XOR; d = NAT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (BinOp (Xor, d, r1, r2)) :: instr }
-| NOT; d = NAT; COMMA; r = NAT; sep; instr = instructions { (Not (d, r)) :: instr }
-| BRANCH; target = IDENT; sep; instr = instructions { (Branch target) :: instr }
-| BRANCHIFZERO; r = NAT; COMMA; target = IDENT; sep; instr = instructions { (BranchIfZero (r, target)) :: instr }
-| BRANCHIFLESS; r1 = NAT; COMMA; r2 = NAT; COMMA; target = IDENT; sep; instr = instructions { (BranchIfLess (r1, r2, target)) :: instr }
-| BRANCHIFULESS; r1 = NAT; COMMA; r2 = NAT; COMMA; target = IDENT; sep; instr = instructions { (BranchIfULess (r1, r2, target)) :: instr }
-| PHI; d = NAT; COMMA; prev = IDENT; COMMA; r1 = NAT; COMMA; r2 = NAT; sep; instr = instructions { (Phi (d, prev, r1, r2)) :: instr }
-| CALL; d = NAT; COMMA; scope = IDENT; COMMA; args = reg_list ; sep; instr = instructions { (Call (d, scope, args)) :: instr }
-| RETURN; r = NAT; sep; instr = instructions { (Return r) :: instr }
-| EXCL; c = COMMAND; sep; instr = instructions { (Command c) :: instr }
+| instr = instruction; LINE_END*; instrs = instructions { instr :: instrs }
+| { [] }
+
+instruction:
+| CONST; d = REG; COMMA; v = INT; LINE_END { Const (d, v) }
+| ADD; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (Add, d, r1, r2) }
+| SUB; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (Sub, d, r1, r2) }
+| MUL; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (Mul, d, r1, r2) }
+| DIV; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (Div, d, r1, r2) }
+| REM; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (Rem, d, r1, r2) }
+| UDIV; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (Udiv, d, r1, r2) }
+| UREM; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (Urem, d, r1, r2) }
+| AND; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (And, d, r1, r2) }
+| OR; d = REG;  COMMA;r1 = REG;  COMMA;r2 = REG; LINE_END { BinOp (Or, d, r1, r2) }
+| XOR; d = REG; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { BinOp (Xor, d, r1, r2) }
+| NOT; d = REG; COMMA; r = REG; LINE_END { Not (d, r) }
+| BRANCH; target = IDENT; LINE_END { Branch target }
+| BRANCHIFZERO; r = REG; COMMA; target = IDENT; LINE_END { BranchIfZero (r, target) }
+| BRANCHIFLESS; r1 = REG; COMMA; r2 = REG; COMMA; target = IDENT; LINE_END { BranchIfLess (r1, r2, target) }
+| BRANCHIFULESS; r1 = REG; COMMA; r2 = REG; COMMA; target = IDENT; LINE_END { BranchIfULess (r1, r2, target) }
+| PHI; d = REG; COMMA; prev = IDENT; COMMA; r1 = REG; COMMA; r2 = REG; LINE_END { Phi (d, prev, r1, r2) }
+| CALL; d = REG; COMMA; scope = IDENT; args = reg_list; LINE_END { Call (d, scope, args) }
+| RETURN; r = REG; LINE_END { Return r }
+| EXCL; c = COMMAND; LINE_END { Command c }
 
 reg_list:
-| sep { [] }
-| r = NAT; sep { [ r ] }
-| r = NAT; COMMA; l = reg_list { r :: l }
-
-sep:
-| LINE_END { }
-| EOF { }
+| COMMA; r = REG; l = reg_list { r :: l }
+| { [] }

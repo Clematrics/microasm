@@ -97,3 +97,19 @@ let scope (name : ScopeId.t) (args_count : int) ?entry
 let program builder =
   let errors = check builder in
   match errors with [] -> Program.make builder | l -> raise (Not_compliant l)
+
+let from_source filename =
+  let print_position fmt (lexbuf: Lexing.lexbuf) =
+    let pos = lexbuf.lex_curr_p in
+    Printf.fprintf fmt "%s:%d:%d" pos.pos_fname pos.pos_lnum
+      (pos.pos_cnum - pos.pos_bol + 1)
+  in
+  let inchn = open_in filename in
+  let lexbuf = Lexing.from_channel inchn in
+  let builder =
+    try Parser.parse Lexer.read_token lexbuf
+    with Parser.Error ->
+      Printf.fprintf stderr "%a: syntax error\n" print_position lexbuf;
+      raise Parser.Error
+  in
+  program builder

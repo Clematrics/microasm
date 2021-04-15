@@ -1,11 +1,11 @@
 open Base
 open Trace
 
-module RegMap : module type of Map.Make (Register)
-
 module Solver (Params : sig
   val bit_width : int
 end) : sig
+  module RegMap : module type of Map.Make (Register)
+
   val bit_width : int
 
   val reg : Register.t -> string
@@ -38,4 +38,6 @@ end) : sig
     end
 end
 
-module Default : module type of Solver(struct let bit_width = 64 end)
+module Default : module type of Solver (struct
+  let bit_width = 64
+end)

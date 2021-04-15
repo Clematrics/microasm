@@ -1,12 +1,13 @@
 open Base
 open Trace
 open Z3
-module RegMap = Map.Make (Register)
 
 module Solver (Params : sig
   val bit_width : int
 end) =
 struct
+  module RegMap = Map.Make (Register)
+
   let bit_width = Params.bit_width
 
   let reg r = Printf.sprintf "r%d" r

@@ -1,8 +1,9 @@
-- Add instruction annotations (checks at runtime, ...)
+- Add more instruction annotations (checks at runtime, ...)
 - Documentation
 - Tests
-- Check correctness of constraints (with tests?)
+- Check more correctness of constraints
 - More ergonomic solver:
 	- read model
 	- iterate with hashing and push/pop
 	- choose hash
+- Trace lexing and parsing

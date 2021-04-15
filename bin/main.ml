@@ -2,7 +2,6 @@ open Microasm.Base
 open Microasm.Build
 open Microasm.Interpreter
 open Microasm.Trace
-open Microasm.Solver
 open Microasm.Solver.Default
 
 let recursive_factorial =

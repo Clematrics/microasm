@@ -5,16 +5,6 @@ open Base
 
 exception SyntaxError of string
 
-(* let entry_kw = "entry" *)
-
-(* 
-type opcode =
-Const | Add | Sub | Mul | Div
-| Rem | Udiv | Urem | And | Or
-| Xor | Not | Branch | BranchIfZero
-| BranchIfLess | BranchIfULess | Phi
-| Call | Return | Command of command *)
-
 let table = Hashtbl.create 20
 
 let () =
@@ -37,6 +27,7 @@ let () =
 		"xor", XOR ;
 		"not", NOT ;
 		"branch", BRANCH ;
+		"bz", BRANCHIFZERO ;
 		"bl", BRANCHIFLESS ;
 		"bul", BRANCHIFULESS ;
 		"phi", PHI ;
@@ -67,8 +58,10 @@ let hex_int = "0x" ('_')* hex_digit (hex_digit | '_')*
 let bin_digit = '0' | '1'
 let bin_int = "0b" ('_')* bin_digit (bin_digit | '_')*
 
-(* identifiers cannot start by a digit, and must contain at least one letter *)
-let ident = ('_')* digit* alpha (alpha | digit | '_')*
+(* identifiers cannot start by a digit, and must contain at least one letter. They cannot be registers too *)
+let ident = (('r' (digit*) (alpha | '_')) | (('_')* digit* alpha)) (alpha | digit | '_')*
+
+let reg = 'r' natural_int
 
 let comment = "//"
 let multiline_comm_start = "/*"
@@ -80,14 +73,14 @@ rule read_token = parse
 | ',' { COMMA }
 | '!' { EXCL }
 | whitespaces { read_token lexbuf }
-| ident { let ident = Lexing.lexeme lexbuf in try Hashtbl.find table ident with Not_found -> IDENT (ident) }
-| natural_int { NAT (int_of_string (Lexing.lexeme lexbuf)) } (* could be bad *)
-| decimal_int { INT (Int64.of_string (Lexing.lexeme lexbuf)) }
-| hex_int { INT (Int64.of_string (Lexing.lexeme lexbuf)) }
-| bin_int { INT (Int64.of_string (Lexing.lexeme lexbuf)) }
-| newline { next_line lexbuf; LINE_END }
+| reg as reg { let len = String.length reg in REG (int_of_string (String.sub reg 1 (len - 1))) }
+| ident as ident { try Hashtbl.find table ident with Not_found -> IDENT (ident) }
+| decimal_int as i { INT (Int64.of_string i) }
+| hex_int as i { INT (Int64.of_string i) }
+| bin_int as i{ INT (Int64.of_string i) }
 | comment { comment lexbuf }
 | multiline_comm_start { multiline_comment lexbuf }
+| newline { next_line lexbuf; LINE_END }
 | eof { EOF }
 and comment = parse
 | newline { next_line lexbuf; LINE_END }

@@ -26,3 +26,5 @@ val scope :
     the entry point *)
 
 val program : program_builder -> Program.t
+
+val from_source : string -> Program.t
